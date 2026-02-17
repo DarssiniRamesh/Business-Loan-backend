@@ -1,4 +1,4 @@
-package com.example.demo.model;
+package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -32,8 +32,6 @@ public class User {
         this.emailVerified = false;
         this.createdAt = LocalDateTime.now();
     }
-
-    // Getters and setters omitted for brevity
 
     public Long getId() { return id; }
 

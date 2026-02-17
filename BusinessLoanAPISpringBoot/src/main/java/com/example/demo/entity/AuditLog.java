@@ -1,4 +1,4 @@
-package com.example.demo.model;
+package com.example.demo.entity;
 
 import jakarta.persistence.*;
 
@@ -36,8 +36,6 @@ public class AuditLog {
         this.meta = meta;
         this.timestamp = LocalDateTime.now();
     }
-
-    // Getters and setters omitted for brevity
 
     public Long getId() { return id; }
     public String getAction() { return action; }

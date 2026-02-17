@@ -1,8 +1,8 @@
 package com.example.demo.service;
 
-import com.example.demo.model.AuditLog;
-import com.example.demo.model.EmailVerificationToken;
-import com.example.demo.model.User;
+import com.example.demo.entity.AuditLog;
+import com.example.demo.entity.EmailVerificationToken;
+import com.example.demo.entity.User;
 import com.example.demo.repository.AuditLogRepository;
 import com.example.demo.repository.EmailVerificationTokenRepository;
 import com.example.demo.repository.UserRepository;

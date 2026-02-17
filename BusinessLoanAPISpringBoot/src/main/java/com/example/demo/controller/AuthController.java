@@ -2,7 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.AuthRequests.*;
 import com.example.demo.dto.AuthResponses.AuthResponse;
-import com.example.demo.model.User;
+import com.example.demo.entity.User;
 import com.example.demo.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
