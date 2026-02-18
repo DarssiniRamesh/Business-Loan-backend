@@ -19,11 +19,6 @@ import java.util.Map;
  * Mailjet implementation of {@link EmailProvider}.
  *
  * Uses Mailjet Send API v3.1 (/v3.1/send).
- *
- * Required configuration:
- * - app.notifications.mailjet.api-key   (env: MAILJET_API_KEY)
- * - app.notifications.mailjet.api-secret (env: MAILJET_API_SECRET)
- * - app.notifications.email.from        (env: APP_NOTIFICATIONS_EMAIL_FROM)
  */
 public class MailjetEmailProvider implements EmailProvider {
 
@@ -34,10 +29,15 @@ public class MailjetEmailProvider implements EmailProvider {
     private final HttpClient httpClient;
 
     public MailjetEmailProvider(NotificationProperties props, ObjectMapper objectMapper) {
+        this(props, objectMapper, HttpClient.newHttpClient());
+    }
+
+    public MailjetEmailProvider(NotificationProperties props, ObjectMapper objectMapper, HttpClient httpClient) {
         this.props = props;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newHttpClient();
+        this.httpClient = httpClient;
     }
+
 
     @Override
     public void send(NotificationRequest request, String toEmail, String subject, String bodyText) {
@@ -60,8 +60,6 @@ public class MailjetEmailProvider implements EmailProvider {
         }
 
         try {
-            // Minimal Mailjet v3.1 payload
-            // See: https://dev.mailjet.com/email/guides/send-api-v31/
             Map<String, Object> message = Map.of(
                     "From", Map.of("Email", fromEmail),
                     "To", new Object[]{Map.of("Email", toEmail)},
@@ -85,7 +83,6 @@ public class MailjetEmailProvider implements EmailProvider {
 
             HttpResponse<String> resp = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
 
-            // Mailjet returns 200 OK on success; errors can also be 4xx/5xx with body details.
             if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
                 throw new IllegalStateException("Mailjet send failed status=" + resp.statusCode() + " body=" + resp.body());
             }
