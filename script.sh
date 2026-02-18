@@ -41,8 +41,12 @@ for ENV_FILE in "${ENV_FILE_CANDIDATES[@]}"; do
 done
 
 # Some environments expose Neon as NEON_DATABASE_URL; normalize to DATABASE_URL if needed.
-if [[ -z "${DATABASE_URL:-}" && -n "${NEON_DATABASE_URL:-}" ]]; then
+URL_SOURCE=""
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  URL_SOURCE="DATABASE_URL"
+elif [[ -n "${NEON_DATABASE_URL:-}" ]]; then
   export DATABASE_URL="${NEON_DATABASE_URL}"
+  URL_SOURCE="NEON_DATABASE_URL"
 fi
 
 # Spring Boot datasource expects a JDBC URL. Neon commonly provides URI form (postgresql://...).
@@ -60,7 +64,6 @@ raw = os.environ.get("DATABASE_URL", "").strip()
 p = urlparse(raw)
 
 if p.scheme not in ("postgresql", "postgres"):
-    # Leave DATABASE_URL as-is if it's not a postgres URI.
     print(raw)
     sys.exit(0)
 
@@ -70,7 +73,6 @@ db = (p.path or "").lstrip("/")
 base = f"jdbc:postgresql://{host}{port}/{db}"
 
 params = dict(parse_qsl(p.query, keep_blank_values=True))
-# Postgres JDBC supports passing user/password as URL parameters.
 if p.username:
     params.setdefault("user", p.username)
 if p.password:
@@ -85,11 +87,14 @@ PY
   fi
 fi
 
+# Also export Spring's conventional env var (highest compatibility for bootstrapping).
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  export SPRING_DATASOURCE_URL="${DATABASE_URL}"
+fi
+
 # Print resolved JDBC url (mask password) to make failures obvious without leaking secrets.
 if [[ -n "${DATABASE_URL:-}" ]]; then
   MASKED_DATABASE_URL="${DATABASE_URL}"
-  MASKED_DATABASE_URL="${MASKED_DATABASE_URL//password=${MASKED_DATABASE_URL#*password=}}"
-  # If password was present, replace its value up to '&' (or end) with '***'
   if [[ "${DATABASE_URL}" == *"password="* ]]; then
     MASKED_DATABASE_URL="$(python3 - <<'PY'
 import os
@@ -106,7 +111,10 @@ else:
 PY
     )"
   fi
-  echo "Resolved DATABASE_URL for Spring (masked): ${MASKED_DATABASE_URL}"
+  if [[ -n "${URL_SOURCE}" ]]; then
+    echo "Resolved database URL source: ${URL_SOURCE}"
+  fi
+  echo "Resolved JDBC URL for Spring (masked): ${MASKED_DATABASE_URL}"
 fi
 
 # Helpful reminder (do not block startup if not set; Spring may still start depending on your config)
