@@ -1,5 +1,8 @@
 package com.example.BusinessLoanAPISpringBoot.loan.service;
 
+import com.example.BusinessLoanAPISpringBoot.integrations.creditbureau.CreditBureauClient;
+import com.example.BusinessLoanAPISpringBoot.integrations.creditbureau.CreditBureauReport;
+import com.example.BusinessLoanAPISpringBoot.integrations.creditbureau.CreditBureauRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -10,7 +13,7 @@ import java.math.BigDecimal;
  * Risk scoring and decisioning engine for loan applications.
  *
  * Notes:
- * - MVP implementation uses self-reported draft JSON only (no external credit bureau yet).
+ * - MVP implementation uses self-reported draft JSON plus (optional) credit bureau integration via an abstraction.
  * - Produces a numeric risk score (0-100; higher is better) plus a decision:
  *   PRE_QUALIFIED / MANUAL_REVIEW / DECLINED.
  * - This is intentionally deterministic and explainable for audit and iteration.
@@ -19,9 +22,11 @@ import java.math.BigDecimal;
 public class RiskDecisioningService {
 
     private final ObjectMapper objectMapper;
+    private final CreditBureauClient creditBureauClient;
 
-    public RiskDecisioningService(ObjectMapper objectMapper) {
+    public RiskDecisioningService(ObjectMapper objectMapper, CreditBureauClient creditBureauClient) {
         this.objectMapper = objectMapper;
+        this.creditBureauClient = creditBureauClient;
     }
 
     public enum Decision {
@@ -72,6 +77,18 @@ public class RiskDecisioningService {
                 root.at("/documents/hasBankStatements"),
                 root.at("/supportingDocuments/hasBankStatements")
         );
+
+        // --- Optional credit bureau augmentation (via integration abstraction) ---
+        CreditBureauReport bureauReport = null;
+        try {
+            CreditBureauRequest bureauRequest = extractCreditBureauRequest(root);
+            bureauReport = (bureauRequest != null && bureauRequest.hasAnyIdentifier())
+                    ? creditBureauClient.fetchReport(bureauRequest)
+                    : null;
+        } catch (Exception ignored) {
+            // Integration errors must never break decisioning in MVP; we proceed without bureau input.
+            bureauReport = null;
+        }
 
         // --- Hard-decline rules (fast, explainable) ---
         if (annualRevenue != null && annualRevenue.compareTo(BigDecimal.ZERO) <= 0) {
@@ -147,6 +164,28 @@ public class RiskDecisioningService {
             score -= 6;
         }
 
+        // Credit bureau factor (if available): map score 300..850 into a small adjustment.
+        // This is intentionally lightweight in MVP and can be replaced by a proper model later.
+        if (bureauReport != null && bureauReport.creditScore() != null) {
+            int cs = bureauReport.creditScore();
+            if (cs >= 740) {
+                score += 10;
+            } else if (cs >= 680) {
+                score += 5;
+            } else if (cs >= 620) {
+                score += 0;
+            } else if (cs >= 560) {
+                score -= 6;
+            } else {
+                score -= 12;
+            }
+
+            // Identity mismatch increases uncertainty; push toward manual review.
+            if (Boolean.FALSE.equals(bureauReport.identityMatch())) {
+                score -= 8;
+            }
+        }
+
         // Clamp to 0..100
         score = Math.max(0, Math.min(100, score));
 
@@ -163,7 +202,7 @@ public class RiskDecisioningService {
             decision = Decision.DECLINED;
         }
 
-        String reason = buildReason(score, decision, annualRevenue, requestedLoanAmount, yearsInBusiness, docs);
+        String reason = buildReason(score, decision, annualRevenue, requestedLoanAmount, yearsInBusiness, docs, bureauReport);
         return new RiskDecision(score, decision, reason);
     }
 
@@ -173,7 +212,8 @@ public class RiskDecisioningService {
             BigDecimal annualRevenue,
             BigDecimal requestedLoanAmount,
             Integer yearsInBusiness,
-            int docs
+            int docs,
+            CreditBureauReport bureauReport
     ) {
         StringBuilder sb = new StringBuilder();
         sb.append("Score=").append(score).append(". Decision=").append(decision).append(". ");
@@ -196,13 +236,75 @@ public class RiskDecisioningService {
             sb.append("Years in business=").append(yearsInBusiness).append(". ");
         }
 
-        sb.append("Docs provided flags=").append(docs).append("/2.");
+        sb.append("Docs provided flags=").append(docs).append("/2. ");
+
+        if (bureauReport == null) {
+            sb.append("Credit bureau=not used/available.");
+        } else if (bureauReport.creditScore() == null) {
+            sb.append("Credit bureau=").append(bureauReport.provider()).append(" (no score).");
+        } else {
+            sb.append("Credit bureau=").append(bureauReport.provider())
+                    .append(" score=").append(bureauReport.creditScore()).append(".");
+            if (bureauReport.identityMatch() != null) {
+                sb.append(" identityMatch=").append(bureauReport.identityMatch()).append(".");
+            }
+        }
 
         // Provide some interpretation hints for manual review cases.
         if (decision == Decision.MANUAL_REVIEW) {
             sb.append(" Manual review triggered due to moderate score or missing/uncertain inputs.");
         }
         return sb.toString();
+    }
+
+    private CreditBureauRequest extractCreditBureauRequest(JsonNode root) {
+        // Keep extraction resilient: accept likely shapes, avoid hard requirements.
+        String first = firstText(
+                root.at("/owner/firstName"),
+                root.at("/ownerInfo/firstName"),
+                root.at("/applicant/firstName"),
+                root.at("/firstName")
+        );
+        String last = firstText(
+                root.at("/owner/lastName"),
+                root.at("/ownerInfo/lastName"),
+                root.at("/applicant/lastName"),
+                root.at("/lastName")
+        );
+
+        // Expect last4 only if provided by UI; do not attempt to parse full SSN.
+        String ssnLast4 = firstText(
+                root.at("/owner/ssnLast4"),
+                root.at("/ownerInfo/ssnLast4"),
+                root.at("/applicant/ssnLast4"),
+                root.at("/ssnLast4")
+        );
+
+        String businessName = firstText(
+                root.at("/businessInfo/legalName"),
+                root.at("/business/legalName"),
+                root.at("/businessInfo/name"),
+                root.at("/business/name")
+        );
+
+        String einLast4 = firstText(
+                root.at("/businessInfo/einLast4"),
+                root.at("/business/einLast4"),
+                root.at("/einLast4")
+        );
+
+        return new CreditBureauRequest(first, last, ssnLast4, businessName, einLast4);
+    }
+
+    private String firstText(JsonNode... candidates) {
+        for (JsonNode n : candidates) {
+            if (n == null || n.isMissingNode() || n.isNull()) continue;
+            if (n.isTextual()) {
+                String s = n.asText().trim();
+                if (!s.isEmpty()) return s;
+            }
+        }
+        return null;
     }
 
     private JsonNode readJsonOrEmptyObject(String json) {
