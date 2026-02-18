@@ -44,3 +44,10 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+tasks.named('bootRun') {
+	// Ensure that -Dspring.datasource.* passed to Gradle are forwarded into the
+	// Spring Boot application JVM. This makes local startup resilient even when
+	// environment/.env loading is flaky.
+	systemProperties System.getProperties()
+}

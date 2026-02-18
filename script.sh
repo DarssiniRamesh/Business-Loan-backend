@@ -142,4 +142,20 @@ Press Ctrl+C to stop the server.
 EOF
 
 cd "${APP_DIR}"
-exec ./gradlew bootRun
+
+# Forward key env vars explicitly so Gradle bootRun/child process always sees them.
+#
+# Additionally, pass datasource settings as JVM system properties (-Dspring.datasource.*).
+# This is the most reliable path when environment propagation / .env sourcing is flaky.
+SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-${DATABASE_URL:-}}"
+
+exec env \
+  DATABASE_URL="${DATABASE_URL:-}" \
+  SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-}" \
+  DATABASE_USERNAME="${DATABASE_USERNAME:-}" \
+  DATABASE_PASSWORD="${DATABASE_PASSWORD:-}" \
+  JWT_SECRET="${JWT_SECRET:-}" \
+  ./gradlew bootRun \
+    -Dspring.datasource.url="${SPRING_DATASOURCE_URL:-}" \
+    -Dspring.datasource.username="${DATABASE_USERNAME:-}" \
+    -Dspring.datasource.password="${DATABASE_PASSWORD:-}"
