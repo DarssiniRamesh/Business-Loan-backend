@@ -24,7 +24,25 @@ public class JwtService {
 
     public JwtService(JwtProperties props) {
         this.props = props;
-        this.key = Keys.hmacShaKeyFor(props.secret().getBytes());
+
+        String secret = props.secret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "JWT secret is not configured. Set environment variable JWT_SECRET (>= 32 bytes / 256 bits). " +
+                            "For manual local runs you can use ./script.sh which will generate a dev secret if missing."
+            );
+        }
+
+        byte[] secretBytes = secret.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (secretBytes.length < 32) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is too short (" + secretBytes.length + " bytes). " +
+                            "JWT HMAC keys must be >= 32 bytes (256 bits) per RFC 7518. " +
+                            "Set a stronger JWT_SECRET (for manual local runs ./script.sh can generate one)."
+            );
+        }
+
+        this.key = Keys.hmacShaKeyFor(secretBytes);
     }
 
     public String issueAccessToken(AppUser user) {

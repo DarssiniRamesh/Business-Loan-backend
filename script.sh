@@ -217,15 +217,35 @@ EOF
   exit 1
 fi
 
-# Helpful reminder (do not block startup if not set; Spring may still start depending on your config)
-if [[ -z "${JWT_SECRET:-}" ]]; then
-  cat <<'EOF'
-NOTE: Some environment variables are not set in this shell.
-The app uses (see application.properties):
-  DATABASE_URL (JDBC), DATABASE_USERNAME, DATABASE_PASSWORD, JWT_SECRET
+# JWT secret handling for manual runs
+# - JJWT requires >=256-bit (32 bytes) for HS256/HS384/HS512 keys.
+# - For local runs, generate a strong ephemeral secret if missing/too short.
+# - We do NOT write this back to any .env file; production must set JWT_SECRET explicitly.
+JWT_SECRET_TOO_SHORT="false"
+if [[ -n "${JWT_SECRET:-}" ]]; then
+  # Count bytes (not chars) to correctly handle non-ASCII (defensive).
+  JWT_SECRET_BYTES="$(python3 - <<'PY'
+import os
+s = os.environ.get("JWT_SECRET","")
+print(len(s.encode("utf-8")))
+PY
+)"
+  if [[ "${JWT_SECRET_BYTES}" -lt 32 ]]; then
+    JWT_SECRET_TOO_SHORT="true"
+  fi
+fi
 
-This script will source .env if present and will convert postgresql://... into jdbc:postgresql://...
-If you rely on the platform/orchestrated environment, ensure these are injected there.
+if [[ -z "${JWT_SECRET:-}" || "${JWT_SECRET_TOO_SHORT}" == "true" ]]; then
+  # 32 random bytes => 256-bit minimum; Base64 makes it safe for env/.env usage.
+  export JWT_SECRET="$(python3 - <<'PY'
+import base64, os
+print(base64.b64encode(os.urandom(32)).decode("ascii"))
+PY
+)"
+  cat <<'EOF'
+NOTE: JWT_SECRET was missing/too short. Generated a strong ephemeral JWT_SECRET for this run only.
+- To set your own: export JWT_SECRET with at least 32 bytes (256 bits).
+- For production, ALWAYS set JWT_SECRET explicitly (do not rely on generated secrets).
 
 EOF
 fi
