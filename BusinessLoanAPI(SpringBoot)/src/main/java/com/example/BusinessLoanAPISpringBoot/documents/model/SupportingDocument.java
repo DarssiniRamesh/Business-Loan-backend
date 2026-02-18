@@ -35,7 +35,8 @@ public class SupportingDocument {
     @Column(name = "size_bytes", nullable = false)
     private Long sizeBytes;
 
-    @Column(name = "sha256_hex", nullable = false, length = 64)
+    // Store as fixed-width CHAR(64) to match the Flyway migration and existing Neon DB column type (bpchar).
+    @Column(name = "sha256_hex", nullable = false, columnDefinition = "char(64)")
     private String sha256Hex;
 
     @Column(name = "storage_key", nullable = false, length = 512)
