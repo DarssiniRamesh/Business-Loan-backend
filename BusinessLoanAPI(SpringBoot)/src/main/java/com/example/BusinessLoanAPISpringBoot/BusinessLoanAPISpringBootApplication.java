@@ -19,6 +19,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 )
 @Tag(name = "Auth", description = "Authentication and MFA endpoints")
 @Tag(name = "System", description = "System/health endpoints")
+@Tag(name = "Loan Drafts", description = "Loan application draft CRUD and multi-step wizard patching")
 public class BusinessLoanAPISpringBootApplication {
 
     public static void main(String[] args) {
