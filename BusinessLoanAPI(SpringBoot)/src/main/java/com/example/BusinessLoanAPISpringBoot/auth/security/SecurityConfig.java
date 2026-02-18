@@ -35,9 +35,19 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
+
+                                // OpenAPI endpoints (springdoc)
                                 "/v3/api-docs",
                                 "/v3/api-docs.yaml",
                                 "/v3/api-docs/**",
+
+                                // Compatibility allowlist:
+                                // When Swagger UI is mounted under /swagger-ui, some configurations/proxies can lead to a
+                                // mistaken fetch of:
+                                //   /swagger-ui/v3/api-docs/swagger-config
+                                // (Observed in preview behind /proxy/3010)
+                                "/swagger-ui/v3/api-docs/**",
+
                                 "/api-docs/**" // legacy/custom path if enabled in some environments
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/**").permitAll()
