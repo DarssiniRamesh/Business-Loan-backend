@@ -31,13 +31,22 @@ echo
 # Load environment variables from .env if present (local/dev convenience).
 # We intentionally do not fail if missing because CI/orchestrated environments may inject env vars differently.
 #
-# IMPORTANT: Prefer .env relative to *current directory* first (requested),
-# then fall back to script dir and app dir.
+# IMPORTANT:
+# For this repo, DB configuration is stored at the *app level*:
+#   BusinessLoanAPI(SpringBoot)/.env
+# This script must prioritize that file; otherwise DATABASE_URL may be empty and
+# Spring Boot will fail with "Failed to determine suitable jdbc url".
+#
+# Precedence:
+#  1) app-level .env in the repo: ${APP_DIR}/.env
+#  2) app-level .env relative to where the user runs the script: ${RUN_DIR}/BusinessLoanAPI(SpringBoot)/.env
+#  3) run-dir .env: ${RUN_DIR}/.env
+#  4) script-dir .env: ${SCRIPT_DIR}/.env
 ENV_FILE_CANDIDATES=(
-  "${RUN_DIR}/.env"
-  "${RUN_DIR}/BusinessLoanAPI(SpringBoot)/.env"
-  "${SCRIPT_DIR}/.env"
   "${APP_DIR}/.env"
+  "${RUN_DIR}/BusinessLoanAPI(SpringBoot)/.env"
+  "${RUN_DIR}/.env"
+  "${SCRIPT_DIR}/.env"
 )
 
 ENV_FILE_LOADED=""
@@ -138,8 +147,20 @@ else
   echo "Resolved DATABASE_URL: (empty)"
 fi
 
+# DB-enabled bootRun must never proceed with an empty URL; fail fast with a clear message.
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  cat <<EOF >&2
+ERROR: DATABASE_URL is empty after loading .env and normalization.
+- Expected to find NEON_DATABASE_URL or DATABASE_URL in: ${APP_DIR}/.env
+- Loaded .env: ${ENV_FILE_LOADED:-"(none)"}
+
+Fix: Add NEON_DATABASE_URL=postgresql://... (or DATABASE_URL=jdbc:postgresql://...) to ${APP_DIR}/.env
+EOF
+  exit 1
+fi
+
 # Helpful reminder (do not block startup if not set; Spring may still start depending on your config)
-if [[ -z "${DATABASE_URL:-}" || -z "${JWT_SECRET:-}" ]]; then
+if [[ -z "${JWT_SECRET:-}" ]]; then
   cat <<'EOF'
 NOTE: Some environment variables are not set in this shell.
 The app uses (see application.properties):
