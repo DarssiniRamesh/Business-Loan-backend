@@ -2,6 +2,7 @@ package com.example.BusinessLoanAPISpringBoot.notifications.config;
 
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.EmailProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.SmsProvider;
+import com.example.BusinessLoanAPISpringBoot.notifications.provider.mailjet.MailjetEmailProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.sendgrid.SendGridEmailProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.stub.StubEmailProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.stub.StubSmsProvider;
@@ -31,6 +32,9 @@ public class NotificationConfig {
         }
         if ("sendgrid".equalsIgnoreCase(provider)) {
             return new SendGridEmailProvider(props, objectMapper);
+        }
+        if ("mailjet".equalsIgnoreCase(provider)) {
+            return new MailjetEmailProvider(props, objectMapper);
         }
         throw new IllegalArgumentException("Unknown email provider: " + provider);
     }

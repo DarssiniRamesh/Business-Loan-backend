@@ -19,6 +19,7 @@ public class NotificationProperties {
     private String officerPhone;
 
     private final SendGridProperties sendgrid = new SendGridProperties();
+    private final MailjetProperties mailjet = new MailjetProperties();
     private final TwilioProperties twilio = new TwilioProperties();
 
     public boolean isEnabled() {
@@ -55,6 +56,10 @@ public class NotificationProperties {
 
     public SendGridProperties getSendgrid() {
         return sendgrid;
+    }
+
+    public MailjetProperties getMailjet() {
+        return mailjet;
     }
 
     public TwilioProperties getTwilio() {
@@ -99,6 +104,42 @@ public class NotificationProperties {
 
         public void setApiKey(String apiKey) {
             this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+    }
+
+    public static class MailjetProperties {
+        private String apiKey;
+        private String apiSecret;
+
+        /**
+         * Mailjet Send API base URL. Default is Mailjet's v3 endpoint host.
+         *
+         * The provider uses /v3.1/send relative to this base.
+         */
+        private String baseUrl = "https://api.mailjet.com";
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getApiSecret() {
+            return apiSecret;
+        }
+
+        public void setApiSecret(String apiSecret) {
+            this.apiSecret = apiSecret;
         }
 
         public String getBaseUrl() {
