@@ -45,6 +45,15 @@ public class SecurityConfig {
                                 // Explicit swagger-config allow (Swagger UI loads this first)
                                 "/v3/api-docs/swagger-config",
 
+                                // If a reverse proxy forwards the preview base path through to the app
+                                // (instead of stripping it), also allow proxied Swagger/OpenAPI endpoints.
+                                "/proxy/**/swagger-ui.html",
+                                "/proxy/**/swagger-ui/**",
+                                "/proxy/**/v3/api-docs",
+                                "/proxy/**/v3/api-docs.yaml",
+                                "/proxy/**/v3/api-docs/**",
+                                "/proxy/**/v3/api-docs/swagger-config",
+
                                 // Compatibility allowlist:
                                 // When Swagger UI is mounted under /swagger-ui, some configurations/proxies can lead to a
                                 // mistaken fetch of:
