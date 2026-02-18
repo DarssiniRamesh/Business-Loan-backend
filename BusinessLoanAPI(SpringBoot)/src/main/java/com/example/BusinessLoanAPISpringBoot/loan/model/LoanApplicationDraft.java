@@ -70,6 +70,13 @@ public class LoanApplicationDraft {
     private Instant decisionedAt;
 
     /**
+     * Timestamp when the draft was formally submitted.
+     * After submission, the draft is locked (immutable) and cannot be updated/patched/deleted.
+     */
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+
+    /**
      * Optimistic concurrency token. Increments on each update.
      */
     @Version
@@ -169,6 +176,15 @@ public class LoanApplicationDraft {
 
     public LoanApplicationDraft setDecisionedAt(Instant decisionedAt) {
         this.decisionedAt = decisionedAt;
+        return this;
+    }
+
+    public Instant getSubmittedAt() {
+        return submittedAt;
+    }
+
+    public LoanApplicationDraft setSubmittedAt(Instant submittedAt) {
+        this.submittedAt = submittedAt;
         return this;
     }
 

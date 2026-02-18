@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/loan/drafts")
-@Tag(name = "Loan Drafts", description = "CRUD APIs for loan application drafts and wizard step patching")
+@Tag(name = "Loan Drafts", description = "CRUD APIs for loan application drafts, readiness checks, and submission")
 public class LoanApplicationDraftController {
 
     private final LoanApplicationDraftService service;
@@ -67,7 +67,7 @@ public class LoanApplicationDraftController {
     @PutMapping("/{draftId}")
     @Operation(
             summary = "Update a loan application draft",
-            description = "Replaces draft fields (data/sectionStatus/currentStep/status). Optionally enforces optimistic concurrency via expectedVersion."
+            description = "Replaces draft fields (data/sectionStatus/currentStep/status). Optionally enforces optimistic concurrency via expectedVersion. Drafts cannot be modified after submission."
     )
     public LoanDraftDtos.DraftResponse update(
             Authentication auth,
@@ -81,7 +81,7 @@ public class LoanApplicationDraftController {
     @PatchMapping("/{draftId}/sections")
     @Operation(
             summary = "Patch a wizard section within a draft",
-            description = "Partially updates a draft by setting/merging the given section JSON under the provided sectionKey. Optionally updates section status and currentStep."
+            description = "Partially updates a draft by setting/merging the given section JSON under the provided sectionKey. Optionally updates section status and currentStep. Drafts cannot be modified after submission."
     )
     public LoanDraftDtos.DraftResponse patchSection(
             Authentication auth,
@@ -92,10 +92,38 @@ public class LoanApplicationDraftController {
         return service.patchSection(userId, draftId, req);
     }
 
+    @PostMapping("/{draftId}/readiness")
+    @Operation(
+            summary = "Check whether a draft is ready to submit",
+            description = "Evaluates readiness based on required sections (sectionStatus must be COMPLETED) and required documents (documents linked to the draft must include metadata.docType entries)."
+    )
+    public LoanDraftDtos.ReadinessResponse readiness(
+            Authentication auth,
+            @PathVariable UUID draftId,
+            @Valid @RequestBody LoanDraftDtos.SubmitRequest req
+    ) {
+        UUID userId = subjectAsUserId(auth);
+        return service.readiness(userId, draftId, req.requiredSections(), req.requiredDocumentTypes());
+    }
+
+    @PostMapping("/{draftId}/submit")
+    @Operation(
+            summary = "Submit a loan application draft",
+            description = "Submits a draft if it is ready (required sections + required documents). Sets status=SUBMITTED and submittedAt, locking the draft against further updates/patches/deletes."
+    )
+    public LoanDraftDtos.DraftResponse submit(
+            Authentication auth,
+            @PathVariable UUID draftId,
+            @Valid @RequestBody LoanDraftDtos.SubmitRequest req
+    ) {
+        UUID userId = subjectAsUserId(auth);
+        return service.submit(userId, draftId, req);
+    }
+
     @PostMapping("/{draftId}/decision")
     @Operation(
             summary = "Run risk scoring and decisioning for a draft",
-            description = "Computes a risk score and decision (PRE_QUALIFIED / MANUAL_REVIEW / DECLINED) for the specified draft, persists the result on the draft record, and returns the updated draft."
+            description = "Computes a risk score and decision (PRE_QUALIFIED / MANUAL_REVIEW / DECLINED) for the specified draft, persists the result on the draft record, and returns the updated draft. Drafts cannot be modified after submission."
     )
     public LoanDraftDtos.DraftResponse decide(Authentication auth, @PathVariable UUID draftId) {
         UUID userId = subjectAsUserId(auth);
@@ -106,7 +134,7 @@ public class LoanApplicationDraftController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(
             summary = "Delete a loan application draft",
-            description = "Deletes a draft by id if owned by the authenticated user."
+            description = "Deletes a draft by id if owned by the authenticated user. Drafts cannot be deleted after submission."
     )
     public void delete(Authentication auth, @PathVariable UUID draftId) {
         UUID userId = subjectAsUserId(auth);

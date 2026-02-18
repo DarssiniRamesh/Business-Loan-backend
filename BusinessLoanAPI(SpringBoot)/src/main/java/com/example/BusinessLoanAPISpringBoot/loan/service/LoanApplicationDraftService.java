@@ -1,5 +1,7 @@
 package com.example.BusinessLoanAPISpringBoot.loan.service;
 
+import com.example.BusinessLoanAPISpringBoot.documents.model.SupportingDocument;
+import com.example.BusinessLoanAPISpringBoot.documents.repo.SupportingDocumentRepository;
 import com.example.BusinessLoanAPISpringBoot.loan.api.dto.LoanDraftDtos;
 import com.example.BusinessLoanAPISpringBoot.loan.model.LoanApplicationDraft;
 import com.example.BusinessLoanAPISpringBoot.loan.repo.LoanApplicationDraftRepository;
@@ -12,8 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Business logic for loan application drafts (multi-step wizard persistence).
@@ -22,15 +24,18 @@ import java.util.UUID;
 public class LoanApplicationDraftService {
 
     private final LoanApplicationDraftRepository repo;
+    private final SupportingDocumentRepository supportingDocumentRepository;
     private final ObjectMapper objectMapper;
     private final RiskDecisioningService riskDecisioningService;
 
     public LoanApplicationDraftService(
             LoanApplicationDraftRepository repo,
+            SupportingDocumentRepository supportingDocumentRepository,
             ObjectMapper objectMapper,
             RiskDecisioningService riskDecisioningService
     ) {
         this.repo = repo;
+        this.supportingDocumentRepository = supportingDocumentRepository;
         this.objectMapper = objectMapper;
         this.riskDecisioningService = riskDecisioningService;
     }
@@ -52,6 +57,7 @@ public class LoanApplicationDraftService {
                 .setSectionStatus(req.sectionStatus() == null ? "{}" : normalizeJsonObjectString(req.sectionStatus()))
                 .setCurrentStep(req.currentStep())
                 .setStatus("DRAFT")
+                .setSubmittedAt(null)
                 .setCreatedAt(now)
                 .setUpdatedAt(now);
 
@@ -87,6 +93,7 @@ public class LoanApplicationDraftService {
         LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
 
+        enforceNotSubmitted(draft);
         enforceExpectedVersionIfPresent(draft, req.expectedVersion());
 
         draft.setData(normalizeJsonObjectString(req.data()));
@@ -120,6 +127,7 @@ public class LoanApplicationDraftService {
         LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
 
+        enforceNotSubmitted(draft);
         enforceExpectedVersionIfPresent(draft, req.expectedVersion());
 
         // Merge sectionData into data under sectionKey
@@ -156,6 +164,8 @@ public class LoanApplicationDraftService {
         LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
 
+        enforceNotSubmitted(draft);
+
         RiskDecisioningService.RiskDecision rd = riskDecisioningService.scoreAndDecide(draft.getData());
 
         draft.setRiskScore(rd.score());
@@ -164,7 +174,6 @@ public class LoanApplicationDraftService {
         draft.setDecisionedAt(Instant.now());
 
         // Optionally also update status to reflect completion of automated decisioning.
-        // Keep existing status if caller wants to control it, but default behavior is helpful.
         if (draft.getStatus() == null || "DRAFT".equalsIgnoreCase(draft.getStatus())) {
             draft.setStatus("DECISIONED");
         }
@@ -175,11 +184,81 @@ public class LoanApplicationDraftService {
 
     // PUBLIC_INTERFACE
     @Transactional
+    public LoanDraftDtos.ReadinessResponse readiness(
+            UUID userId,
+            UUID draftId,
+            List<String> requiredSections,
+            List<String> requiredDocumentTypes
+    ) {
+        /**
+         * Evaluate whether a draft is ready to be submitted:
+         * - requiredSections must be present in draft.sectionStatus and marked complete
+         * - requiredDocumentTypes must be present among docs linked to this draft where metadata.docType matches
+         */
+        LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
+
+        List<String> missingSections = computeMissingRequiredSections(draft, requiredSections);
+        List<String> missingDocTypes = computeMissingRequiredDocumentTypes(userId, draftId, requiredDocumentTypes);
+
+        boolean ready = missingSections.isEmpty() && missingDocTypes.isEmpty();
+        return new LoanDraftDtos.ReadinessResponse(draftId, ready, missingSections, missingDocTypes);
+    }
+
+    // PUBLIC_INTERFACE
+    @Transactional
+    public LoanDraftDtos.DraftResponse submit(UUID userId, UUID draftId, LoanDraftDtos.SubmitRequest req) {
+        /**
+         * Submit a draft:
+         * - enforce readiness (required sections + docs)
+         * - optionally run decisioning
+         * - set submittedAt and lock further edits
+         */
+        LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
+
+        enforceNotSubmitted(draft);
+
+        List<String> missingSections = computeMissingRequiredSections(draft, req.requiredSections());
+        List<String> missingDocTypes = computeMissingRequiredDocumentTypes(userId, draftId, req.requiredDocumentTypes());
+
+        if (!missingSections.isEmpty() || !missingDocTypes.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Draft is not ready to submit. Missing sections=" + missingSections + " missingDocumentTypes=" + missingDocTypes
+            );
+        }
+
+        boolean shouldRunDecisioning = req.runDecisioning() == null || Boolean.TRUE.equals(req.runDecisioning());
+        if (shouldRunDecisioning) {
+            RiskDecisioningService.RiskDecision rd = riskDecisioningService.scoreAndDecide(draft.getData());
+            draft.setRiskScore(rd.score());
+            draft.setDecision(rd.decision().name());
+            draft.setDecisionReason(rd.reason());
+            draft.setDecisionedAt(Instant.now());
+        }
+
+        draft.setStatus("SUBMITTED");
+        draft.setSubmittedAt(Instant.now());
+        draft.setUpdatedAt(Instant.now());
+
+        return toResponse(repo.save(draft));
+    }
+
+    // PUBLIC_INTERFACE
+    @Transactional
     public void delete(UUID userId, UUID draftId) {
         /** Delete a draft owned by the current user. */
         LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
+
+        enforceNotSubmitted(draft);
         repo.delete(draft);
+    }
+
+    private void enforceNotSubmitted(LoanApplicationDraft draft) {
+        if (draft.getSubmittedAt() != null || "SUBMITTED".equalsIgnoreCase(draft.getStatus())) {
+            throw new IllegalArgumentException("Draft is submitted and locked. No further modifications are allowed.");
+        }
     }
 
     private void enforceExpectedVersionIfPresent(LoanApplicationDraft draft, Long expectedVersion) {
@@ -187,9 +266,86 @@ public class LoanApplicationDraftService {
             return;
         }
         if (!expectedVersion.equals(draft.getVersion())) {
-            // Use IllegalArgumentException for current error handler; callers interpret as 400.
-            // If later extended, map to 409 in a dedicated exception handler.
             throw new IllegalArgumentException("Version mismatch. Expected=" + expectedVersion + " actual=" + draft.getVersion());
+        }
+    }
+
+    private List<String> computeMissingRequiredSections(LoanApplicationDraft draft, List<String> requiredSections) {
+        if (requiredSections == null) {
+            return List.of();
+        }
+
+        ObjectNode sectionStatus = parseObjectOrThrow(draft.getSectionStatus(), "stored sectionStatus");
+        List<String> missing = new ArrayList<>();
+
+        for (String sectionKey : requiredSections) {
+            if (sectionKey == null || sectionKey.isBlank()) {
+                continue;
+            }
+
+            JsonNode node = sectionStatus.get(sectionKey);
+            if (node == null || node.isNull()) {
+                missing.add(sectionKey);
+                continue;
+            }
+
+            // Support both:
+            // 1) "COMPLETED"
+            // 2) {"state":"COMPLETED", ...}
+            String state = null;
+            if (node.isTextual()) {
+                state = node.asText();
+            } else if (node.isObject() && node.get("state") != null && node.get("state").isTextual()) {
+                state = node.get("state").asText();
+            }
+
+            if (state == null || !"COMPLETED".equalsIgnoreCase(state)) {
+                missing.add(sectionKey);
+            }
+        }
+        return missing;
+    }
+
+    private List<String> computeMissingRequiredDocumentTypes(UUID userId, UUID draftId, List<String> requiredDocTypes) {
+        if (requiredDocTypes == null) {
+            return List.of();
+        }
+
+        List<SupportingDocument> docs = supportingDocumentRepository
+                .findAllByUserIdAndLoanDraftIdOrderByCreatedAtDesc(userId, draftId);
+
+        Set<String> presentTypes = docs.stream()
+                .map(SupportingDocument::getMetadata)
+                .map(this::extractDocTypeFromMetadata)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<String> missing = new ArrayList<>();
+        for (String required : requiredDocTypes) {
+            if (required == null || required.isBlank()) {
+                continue;
+            }
+            if (!presentTypes.contains(required)) {
+                missing.add(required);
+            }
+        }
+        return missing;
+    }
+
+    private String extractDocTypeFromMetadata(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(metadataJson);
+            if (node == null || !node.isObject()) {
+                return null;
+            }
+            JsonNode docType = node.get("docType");
+            return (docType != null && docType.isTextual()) ? docType.asText() : null;
+        } catch (JsonProcessingException e) {
+            // If bad metadata exists historically, ignore it for readiness (treat as not present).
+            return null;
         }
     }
 
@@ -205,6 +361,7 @@ public class LoanApplicationDraftService {
                 d.getDecision(),
                 d.getDecisionReason(),
                 d.getDecisionedAt(),
+                d.getSubmittedAt(),
                 d.getVersion(),
                 d.getCreatedAt(),
                 d.getUpdatedAt()

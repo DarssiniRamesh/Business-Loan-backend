@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -66,6 +67,28 @@ public final class LoanDraftDtos {
             Long expectedVersion
     ) {}
 
+    @Schema(name = "LoanDraftReadinessResponse", description = "Readiness evaluation for draft submission.")
+    public record ReadinessResponse(
+            @Schema(description = "Draft id") UUID draftId,
+            @Schema(description = "True if draft is ready to submit.") boolean ready,
+            @Schema(description = "Missing required section keys (based on sectionStatus).") List<String> missingSections,
+            @Schema(description = "Missing required document types.") List<String> missingDocumentTypes
+    ) {}
+
+    @Schema(name = "LoanDraftSubmitRequest", description = "Submit a draft. Locks it from further edits if ready.")
+    public record SubmitRequest(
+            @Schema(description = "List of required section keys that must be marked complete.", example = "[\"businessInfo\",\"ownerInfo\",\"loanRequest\"]")
+            @NotNull
+            List<String> requiredSections,
+
+            @Schema(description = "List of required document types that must be uploaded and linked to this draft via documents.metadata.docType.", example = "[\"BANK_STATEMENT\",\"TAX_RETURN\"]")
+            @NotNull
+            List<String> requiredDocumentTypes,
+
+            @Schema(description = "If true (default), run automated decisioning as part of submission.")
+            Boolean runDecisioning
+    ) {}
+
     @Schema(name = "LoanDraftResponse", description = "Loan application draft response model.")
     public record DraftResponse(
             @Schema(description = "Draft ID.")
@@ -89,6 +112,9 @@ public final class LoanDraftDtos {
             String decisionReason,
             @Schema(description = "Timestamp when the decision was last computed.")
             Instant decisionedAt,
+
+            @Schema(description = "Timestamp when the draft was submitted (locks further modifications). Null if not submitted.")
+            Instant submittedAt,
 
             @Schema(description = "Optimistic concurrency version.")
             Long version,
