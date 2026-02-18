@@ -48,44 +48,21 @@ fi
 # Spring Boot datasource expects a JDBC URL. Neon commonly provides URI form (postgresql://...).
 # Convert URI -> JDBC for local runs, preserving any query string.
 # Examples:
-#   postgresql://user:pass@host/db?sslmode=require
-#   -> jdbc:postgresql://host/db?sslmode=require&user=user&password=pass
+#   postgresql://user:pass@host/db?sslmode=require&channel_binding=require
+#   -> jdbc:postgresql://host/db?sslmode=require&channel_binding=require&user=user&password=pass
 if [[ -n "${DATABASE_URL:-}" && "${DATABASE_URL}" != jdbc:* ]]; then
   if [[ "${DATABASE_URL}" == postgresql://* || "${DATABASE_URL}" == postgres://* ]]; then
-    python3 - <<'PY'
-import os, sys
-from urllib.parse import urlparse, parse_qsl, urlencode
-
-raw = os.environ.get("DATABASE_URL", "")
-p = urlparse(raw)
-if p.scheme not in ("postgresql", "postgres"):
-    sys.exit(0)
-
-# Build base JDBC URL
-host = p.hostname or ""
-port = f":{p.port}" if p.port else ""
-db = (p.path or "").lstrip("/")
-base = f"jdbc:postgresql://{host}{port}/{db}"
-
-# Merge query params + user/password (JDBC driver supports user/password in query)
-params = dict(parse_qsl(p.query, keep_blank_values=True))
-if p.username:
-    params.setdefault("user", p.username)
-if p.password:
-    params.setdefault("password", p.password)
-
-qs = urlencode(params) if params else ""
-jdbc = base + (f"?{qs}" if qs else "")
-print(jdbc)
-PY
     JDBC_URL="$(python3 - <<'PY'
 import os, sys
 from urllib.parse import urlparse, parse_qsl, urlencode
 
-raw = os.environ.get("DATABASE_URL", "")
+raw = os.environ.get("DATABASE_URL", "").strip()
 p = urlparse(raw)
+
 if p.scheme not in ("postgresql", "postgres"):
-    sys.exit(1)
+    # Leave DATABASE_URL as-is if it's not a postgres URI.
+    print(raw)
+    sys.exit(0)
 
 host = p.hostname or ""
 port = f":{p.port}" if p.port else ""
@@ -93,6 +70,7 @@ db = (p.path or "").lstrip("/")
 base = f"jdbc:postgresql://{host}{port}/{db}"
 
 params = dict(parse_qsl(p.query, keep_blank_values=True))
+# Postgres JDBC supports passing user/password as URL parameters.
 if p.username:
     params.setdefault("user", p.username)
 if p.password:
@@ -105,6 +83,30 @@ PY
     )"
     export DATABASE_URL="${JDBC_URL}"
   fi
+fi
+
+# Print resolved JDBC url (mask password) to make failures obvious without leaking secrets.
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  MASKED_DATABASE_URL="${DATABASE_URL}"
+  MASKED_DATABASE_URL="${MASKED_DATABASE_URL//password=${MASKED_DATABASE_URL#*password=}}"
+  # If password was present, replace its value up to '&' (or end) with '***'
+  if [[ "${DATABASE_URL}" == *"password="* ]]; then
+    MASKED_DATABASE_URL="$(python3 - <<'PY'
+import os
+url = os.environ.get("DATABASE_URL","")
+if "password=" not in url:
+    print(url)
+    raise SystemExit(0)
+prefix, rest = url.split("password=", 1)
+if "&" in rest:
+    _, suffix = rest.split("&", 1)
+    print(prefix + "password=***&" + suffix)
+else:
+    print(prefix + "password=***")
+PY
+    )"
+  fi
+  echo "Resolved DATABASE_URL for Spring (masked): ${MASKED_DATABASE_URL}"
 fi
 
 # Helpful reminder (do not block startup if not set; Spring may still start depending on your config)
