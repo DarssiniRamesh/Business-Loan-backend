@@ -39,8 +39,8 @@ fi
 
 cat <<'EOF'
 Swagger/OpenAPI (based on current application.properties):
-  Swagger UI: http://localhost:3010/swagger-ui.html
-  OpenAPI JSON: http://localhost:3010/api-docs
+  Swagger UI: http://localhost:3010/swagger-ui/index.html
+  OpenAPI JSON: http://localhost:3010/v3/api-docs
 
 Health (actuator):
   http://localhost:3010/actuator/health
