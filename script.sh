@@ -8,6 +8,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${SCRIPT_DIR}/BusinessLoanAPI(SpringBoot)"
+# Resolve .env relative to where the user runs the script from (requested behavior).
+# This avoids surprises when `./script.sh` is invoked from different directories.
+RUN_DIR="$(pwd -P)"
 
 if [[ ! -d "${APP_DIR}" ]]; then
   echo "ERROR: Spring Boot project directory not found: ${APP_DIR}" >&2
@@ -22,16 +25,25 @@ fi
 
 echo "Starting Business Loan Spring Boot API..."
 echo "Project: ${APP_DIR}"
+echo "Run directory: ${RUN_DIR}"
 echo
 
 # Load environment variables from .env if present (local/dev convenience).
 # We intentionally do not fail if missing because CI/orchestrated environments may inject env vars differently.
+#
+# IMPORTANT: Prefer .env relative to *current directory* first (requested),
+# then fall back to script dir and app dir.
 ENV_FILE_CANDIDATES=(
+  "${RUN_DIR}/.env"
+  "${RUN_DIR}/BusinessLoanAPI(SpringBoot)/.env"
   "${SCRIPT_DIR}/.env"
   "${APP_DIR}/.env"
 )
+
+ENV_FILE_LOADED=""
 for ENV_FILE in "${ENV_FILE_CANDIDATES[@]}"; do
   if [[ -f "${ENV_FILE}" ]]; then
+    ENV_FILE_LOADED="${ENV_FILE}"
     # shellcheck disable=SC1090
     set -a
     source "${ENV_FILE}"
@@ -39,6 +51,12 @@ for ENV_FILE in "${ENV_FILE_CANDIDATES[@]}"; do
     break
   fi
 done
+
+if [[ -n "${ENV_FILE_LOADED}" ]]; then
+  echo "Loaded .env: ${ENV_FILE_LOADED}"
+else
+  echo "Loaded .env: (none found)"
+fi
 
 # Some environments expose Neon as NEON_DATABASE_URL; normalize to DATABASE_URL if needed.
 URL_SOURCE=""
@@ -93,6 +111,7 @@ if [[ -n "${DATABASE_URL:-}" ]]; then
 fi
 
 # Print resolved JDBC url (mask password) to make failures obvious without leaking secrets.
+# This is explicit debug output requested by the task.
 if [[ -n "${DATABASE_URL:-}" ]]; then
   MASKED_DATABASE_URL="${DATABASE_URL}"
   if [[ "${DATABASE_URL}" == *"password="* ]]; then
@@ -114,7 +133,9 @@ PY
   if [[ -n "${URL_SOURCE}" ]]; then
     echo "Resolved database URL source: ${URL_SOURCE}"
   fi
-  echo "Resolved JDBC URL for Spring (masked): ${MASKED_DATABASE_URL}"
+  echo "Resolved DATABASE_URL (masked): ${MASKED_DATABASE_URL}"
+else
+  echo "Resolved DATABASE_URL: (empty)"
 fi
 
 # Helpful reminder (do not block startup if not set; Spring may still start depending on your config)
@@ -143,10 +164,9 @@ EOF
 
 cd "${APP_DIR}"
 
-# Forward key env vars explicitly so Gradle bootRun/child process always sees them.
-#
-# Additionally, pass datasource settings as JVM system properties (-Dspring.datasource.*).
-# This is the most reliable path when environment propagation / .env sourcing is flaky.
+# Pass datasource settings deterministically.
+# We both export env vars AND pass explicit system properties. This prevents failures where Gradle's
+# bootRun child process doesn't see env vars due to sourcing issues.
 SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-${DATABASE_URL:-}}"
 
 exec env \
