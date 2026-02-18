@@ -47,12 +47,20 @@ public class SecurityConfig {
 
                                 // If a reverse proxy forwards the preview base path through to the app
                                 // (instead of stripping it), also allow proxied Swagger/OpenAPI endpoints.
-                                "/proxy/**/swagger-ui.html",
-                                "/proxy/**/swagger-ui/**",
-                                "/proxy/**/v3/api-docs",
-                                "/proxy/**/v3/api-docs.yaml",
-                                "/proxy/**/v3/api-docs/**",
-                                "/proxy/**/v3/api-docs/swagger-config",
+                                //
+                                // IMPORTANT:
+                                // Spring Security 6 uses Spring MVC's PathPatternParser for these String patterns.
+                                // Patterns like "/proxy/**/v3/api-docs/**" are invalid because "**" cannot appear
+                                // in the middle of the pattern with additional path segments following it.
+                                // In our preview/proxy setup the path shape is typically:
+                                //   /proxy/{port-or-appId}/...
+                                // so a single-segment wildcard is correct and avoids PatternParseException.
+                                "/proxy/*/swagger-ui.html",
+                                "/proxy/*/swagger-ui/**",
+                                "/proxy/*/v3/api-docs",
+                                "/proxy/*/v3/api-docs.yaml",
+                                "/proxy/*/v3/api-docs/**",
+                                "/proxy/*/v3/api-docs/swagger-config",
 
                                 // Compatibility allowlist:
                                 // When Swagger UI is mounted under /swagger-ui, some configurations/proxies can lead to a
