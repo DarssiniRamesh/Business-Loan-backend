@@ -24,15 +24,98 @@ echo "Starting Business Loan Spring Boot API..."
 echo "Project: ${APP_DIR}"
 echo
 
+# Load environment variables from .env if present (local/dev convenience).
+# We intentionally do not fail if missing because CI/orchestrated environments may inject env vars differently.
+ENV_FILE_CANDIDATES=(
+  "${SCRIPT_DIR}/.env"
+  "${APP_DIR}/.env"
+)
+for ENV_FILE in "${ENV_FILE_CANDIDATES[@]}"; do
+  if [[ -f "${ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    set -a
+    source "${ENV_FILE}"
+    set +a
+    break
+  fi
+done
+
+# Some environments expose Neon as NEON_DATABASE_URL; normalize to DATABASE_URL if needed.
+if [[ -z "${DATABASE_URL:-}" && -n "${NEON_DATABASE_URL:-}" ]]; then
+  export DATABASE_URL="${NEON_DATABASE_URL}"
+fi
+
+# Spring Boot datasource expects a JDBC URL. Neon commonly provides URI form (postgresql://...).
+# Convert URI -> JDBC for local runs, preserving any query string.
+# Examples:
+#   postgresql://user:pass@host/db?sslmode=require
+#   -> jdbc:postgresql://host/db?sslmode=require&user=user&password=pass
+if [[ -n "${DATABASE_URL:-}" && "${DATABASE_URL}" != jdbc:* ]]; then
+  if [[ "${DATABASE_URL}" == postgresql://* || "${DATABASE_URL}" == postgres://* ]]; then
+    python3 - <<'PY'
+import os, sys
+from urllib.parse import urlparse, parse_qsl, urlencode
+
+raw = os.environ.get("DATABASE_URL", "")
+p = urlparse(raw)
+if p.scheme not in ("postgresql", "postgres"):
+    sys.exit(0)
+
+# Build base JDBC URL
+host = p.hostname or ""
+port = f":{p.port}" if p.port else ""
+db = (p.path or "").lstrip("/")
+base = f"jdbc:postgresql://{host}{port}/{db}"
+
+# Merge query params + user/password (JDBC driver supports user/password in query)
+params = dict(parse_qsl(p.query, keep_blank_values=True))
+if p.username:
+    params.setdefault("user", p.username)
+if p.password:
+    params.setdefault("password", p.password)
+
+qs = urlencode(params) if params else ""
+jdbc = base + (f"?{qs}" if qs else "")
+print(jdbc)
+PY
+    JDBC_URL="$(python3 - <<'PY'
+import os, sys
+from urllib.parse import urlparse, parse_qsl, urlencode
+
+raw = os.environ.get("DATABASE_URL", "")
+p = urlparse(raw)
+if p.scheme not in ("postgresql", "postgres"):
+    sys.exit(1)
+
+host = p.hostname or ""
+port = f":{p.port}" if p.port else ""
+db = (p.path or "").lstrip("/")
+base = f"jdbc:postgresql://{host}{port}/{db}"
+
+params = dict(parse_qsl(p.query, keep_blank_values=True))
+if p.username:
+    params.setdefault("user", p.username)
+if p.password:
+    params.setdefault("password", p.password)
+
+qs = urlencode(params) if params else ""
+jdbc = base + (f"?{qs}" if qs else "")
+print(jdbc)
+PY
+    )"
+    export DATABASE_URL="${JDBC_URL}"
+  fi
+fi
+
 # Helpful reminder (do not block startup if not set; Spring may still start depending on your config)
-if [[ -z "${DATABASE_URL:-}" || -z "${DATABASE_USERNAME:-}" || -z "${DATABASE_PASSWORD:-}" || -z "${JWT_SECRET:-}" ]]; then
+if [[ -z "${DATABASE_URL:-}" || -z "${JWT_SECRET:-}" ]]; then
   cat <<'EOF'
 NOTE: Some environment variables are not set in this shell.
 The app uses (see application.properties):
-  DATABASE_URL, DATABASE_USERNAME, DATABASE_PASSWORD, JWT_SECRET
+  DATABASE_URL (JDBC), DATABASE_USERNAME, DATABASE_PASSWORD, JWT_SECRET
 
-If you rely on the container's .env file, run from the platform/orchestrated environment,
-or export them in your terminal before running this script.
+This script will source .env if present and will convert postgresql://... into jdbc:postgresql://...
+If you rely on the platform/orchestrated environment, ensure these are injected there.
 
 EOF
 fi
