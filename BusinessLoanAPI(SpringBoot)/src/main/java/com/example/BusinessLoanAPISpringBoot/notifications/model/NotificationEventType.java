@@ -6,5 +6,10 @@ package com.example.BusinessLoanAPISpringBoot.notifications.model;
 public enum NotificationEventType {
     APPLICATION_SUBMITTED,
     DECISION_PRODUCED,
-    DECISION_OVERRIDDEN
+    DECISION_OVERRIDDEN,
+
+    /**
+     * MFA one-time-password delivery (email/SMS).
+     */
+    MFA_OTP
 }

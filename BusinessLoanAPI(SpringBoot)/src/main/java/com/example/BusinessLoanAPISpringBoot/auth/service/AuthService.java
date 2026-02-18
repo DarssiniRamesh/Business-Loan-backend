@@ -1,6 +1,7 @@
 package com.example.BusinessLoanAPISpringBoot.auth.service;
 
 import com.example.BusinessLoanAPISpringBoot.auth.config.JwtProperties;
+import com.example.BusinessLoanAPISpringBoot.auth.config.MfaProperties;
 import com.example.BusinessLoanAPISpringBoot.auth.model.*;
 import com.example.BusinessLoanAPISpringBoot.auth.repo.AppRoleRepository;
 import com.example.BusinessLoanAPISpringBoot.auth.repo.AppUserRepository;
@@ -24,6 +25,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final JwtProperties jwtProps;
     private final MfaService mfaService;
+    private final MfaProperties mfaProps;
 
     public AuthService(
             AppUserRepository userRepo,
@@ -32,7 +34,8 @@ public class AuthService {
             CryptoService cryptoService,
             JwtService jwtService,
             JwtProperties jwtProps,
-            MfaService mfaService
+            MfaService mfaService,
+            MfaProperties mfaProps
     ) {
         this.userRepo = userRepo;
         this.roleRepo = roleRepo;
@@ -41,6 +44,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.jwtProps = jwtProps;
         this.mfaService = mfaService;
+        this.mfaProps = mfaProps;
     }
 
     @Transactional
@@ -79,11 +83,12 @@ public class AuthService {
         }
 
         if (user.isMfaEnabled()) {
-            mfaService.createChallenge(user, 300); // 5 minutes
-            return new LoginStep1Result(user.getId(), true);
+            String otp = mfaService.createChallenge(user, 300); // 5 minutes
+            String devOtp = mfaProps.isDevReturnOtp() ? otp : null;
+            return new LoginStep1Result(user.getId(), true, devOtp);
         }
 
-        return new LoginStep1Result(user.getId(), false);
+        return new LoginStep1Result(user.getId(), false, null);
     }
 
     @Transactional
@@ -143,6 +148,6 @@ public class AuthService {
         });
     }
 
-    public record LoginStep1Result(UUID userId, boolean pendingMfa) {}
+    public record LoginStep1Result(UUID userId, boolean pendingMfa, String devOtp) {}
     public record AuthTokens(String accessToken, String refreshToken) {}
 }

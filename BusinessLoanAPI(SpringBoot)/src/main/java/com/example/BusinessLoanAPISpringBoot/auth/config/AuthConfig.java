@@ -7,5 +7,5 @@ import org.springframework.context.annotation.Configuration;
  * Authentication module configuration.
  */
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, MfaProperties.class})
 public class AuthConfig {}

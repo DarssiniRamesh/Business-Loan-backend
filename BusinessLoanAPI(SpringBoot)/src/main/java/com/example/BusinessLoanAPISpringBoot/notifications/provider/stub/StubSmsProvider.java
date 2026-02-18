@@ -27,9 +27,9 @@ public class StubSmsProvider implements SmsProvider {
                 "[STUB SMS] from={} to={} eventType={} draftId={} applicantUserId={} message={}",
                 from,
                 toPhoneE164,
-                request.eventType(),
-                request.draftId(),
-                request.applicantUserId(),
+                request == null ? null : request.eventType(),
+                request == null ? null : request.draftId(),
+                request == null ? null : request.applicantUserId(),
                 message
         );
     }

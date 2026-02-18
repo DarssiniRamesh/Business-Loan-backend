@@ -36,7 +36,7 @@ public class AuthController {
     @Operation(summary = "Login (step 1)", description = "Validates credentials; if MFA enabled, issues OTP challenge and returns pendingMfa=true.")
     public ResponseEntity<AuthDtos.LoginStep1Response> loginStep1(@Valid @RequestBody AuthDtos.LoginStep1Request req) {
         AuthService.LoginStep1Result result = authService.loginStep1(req.email(), req.password());
-        return ResponseEntity.ok(new AuthDtos.LoginStep1Response(result.userId(), result.pendingMfa()));
+        return ResponseEntity.ok(new AuthDtos.LoginStep1Response(result.userId(), result.pendingMfa(), result.devOtp()));
     }
 
     @PostMapping("/login/{userId}/mfa/verify")

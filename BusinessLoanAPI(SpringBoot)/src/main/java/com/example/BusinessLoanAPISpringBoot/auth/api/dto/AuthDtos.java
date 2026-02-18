@@ -29,7 +29,8 @@ public class AuthDtos {
 
     public record LoginStep1Response(
             UUID userId,
-            boolean pendingMfa
+            boolean pendingMfa,
+            String devOtp
     ) {}
 
     public record VerifyMfaRequest(

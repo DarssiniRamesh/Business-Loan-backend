@@ -2,9 +2,12 @@ package com.example.BusinessLoanAPISpringBoot.notifications.config;
 
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.EmailProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.SmsProvider;
+import com.example.BusinessLoanAPISpringBoot.notifications.provider.sendgrid.SendGridEmailProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.stub.StubEmailProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.provider.stub.StubSmsProvider;
+import com.example.BusinessLoanAPISpringBoot.notifications.provider.twilio.TwilioSmsProvider;
 import com.example.BusinessLoanAPISpringBoot.notifications.service.NotificationService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,15 +24,27 @@ import org.springframework.context.annotation.Configuration;
 public class NotificationConfig {
 
     @Bean
-    public EmailProvider emailProvider(NotificationProperties props) {
-        // Currently only stub is implemented; hooks exist for sendgrid provider later.
-        return new StubEmailProvider(props);
+    public EmailProvider emailProvider(NotificationProperties props, ObjectMapper objectMapper) {
+        String provider = props.getEmail().getProvider();
+        if (provider == null || provider.isBlank() || "stub".equalsIgnoreCase(provider)) {
+            return new StubEmailProvider(props);
+        }
+        if ("sendgrid".equalsIgnoreCase(provider)) {
+            return new SendGridEmailProvider(props, objectMapper);
+        }
+        throw new IllegalArgumentException("Unknown email provider: " + provider);
     }
 
     @Bean
     public SmsProvider smsProvider(NotificationProperties props) {
-        // Currently only stub is implemented; hooks exist for twilio provider later.
-        return new StubSmsProvider(props);
+        String provider = props.getSms().getProvider();
+        if (provider == null || provider.isBlank() || "stub".equalsIgnoreCase(provider)) {
+            return new StubSmsProvider(props);
+        }
+        if ("twilio".equalsIgnoreCase(provider)) {
+            return new TwilioSmsProvider(props);
+        }
+        throw new IllegalArgumentException("Unknown SMS provider: " + provider);
     }
 
     @Bean
