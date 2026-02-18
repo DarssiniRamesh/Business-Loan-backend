@@ -33,6 +33,7 @@ public class SecurityConfig {
                         // NOTE: "/v3/api-docs/**" does NOT match the exact "/v3/api-docs" path,
                         // which causes a 403 when Swagger UI tries to load the OpenAPI JSON.
                         .requestMatchers(
+                                // Swagger UI
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
 
@@ -40,6 +41,9 @@ public class SecurityConfig {
                                 "/v3/api-docs",
                                 "/v3/api-docs.yaml",
                                 "/v3/api-docs/**",
+
+                                // Explicit swagger-config allow (Swagger UI loads this first)
+                                "/v3/api-docs/swagger-config",
 
                                 // Compatibility allowlist:
                                 // When Swagger UI is mounted under /swagger-ui, some configurations/proxies can lead to a
