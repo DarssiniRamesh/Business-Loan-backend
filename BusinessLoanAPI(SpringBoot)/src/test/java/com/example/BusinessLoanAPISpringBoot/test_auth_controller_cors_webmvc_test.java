@@ -70,7 +70,7 @@ class test_auth_controller_cors_webmvc_test {
         AppUser created = new AppUser();
         created.setId(UUID.randomUUID());
         created.setEmail("user@example.com");
-        created.setMfaEnabled(true);
+        created.setMfaEnabled(false);
 
         when(authService.registerApplicant(anyString(), anyString())).thenReturn(created);
 
@@ -85,6 +85,6 @@ class test_auth_controller_cors_webmvc_test {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
                 .andExpect(jsonPath("$.email").value("user@example.com"))
-                .andExpect(jsonPath("$.mfaEnabled").value(true));
+                .andExpect(jsonPath("$.mfaEnabled").value(false));
     }
 }

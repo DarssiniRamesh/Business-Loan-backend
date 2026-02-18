@@ -22,19 +22,9 @@ public class AuthDtos {
             boolean mfaEnabled
     ) {}
 
-    public record LoginStep1Request(
+    public record LoginRequest(
             @Email @NotBlank String email,
             @NotBlank String password
-    ) {}
-
-    public record LoginStep1Response(
-            UUID userId,
-            boolean pendingMfa,
-            String devOtp
-    ) {}
-
-    public record VerifyMfaRequest(
-            @NotBlank String otp
     ) {}
 
     public record TokenResponse(

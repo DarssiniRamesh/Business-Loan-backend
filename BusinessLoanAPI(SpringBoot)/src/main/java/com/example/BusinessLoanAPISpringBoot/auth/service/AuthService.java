@@ -1,7 +1,6 @@
 package com.example.BusinessLoanAPISpringBoot.auth.service;
 
 import com.example.BusinessLoanAPISpringBoot.auth.config.JwtProperties;
-import com.example.BusinessLoanAPISpringBoot.auth.config.MfaProperties;
 import com.example.BusinessLoanAPISpringBoot.auth.model.*;
 import com.example.BusinessLoanAPISpringBoot.auth.repo.AppRoleRepository;
 import com.example.BusinessLoanAPISpringBoot.auth.repo.AppUserRepository;
@@ -13,7 +12,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Core authentication logic: registration, login, MFA verification, refresh, logout.
+ * Core authentication logic: registration, login, refresh, logout.
  */
 @Service
 public class AuthService {
@@ -24,8 +23,6 @@ public class AuthService {
     private final CryptoService cryptoService;
     private final JwtService jwtService;
     private final JwtProperties jwtProps;
-    private final MfaService mfaService;
-    private final MfaProperties mfaProps;
 
     public AuthService(
             AppUserRepository userRepo,
@@ -33,9 +30,7 @@ public class AuthService {
             RefreshTokenRepository refreshTokenRepo,
             CryptoService cryptoService,
             JwtService jwtService,
-            JwtProperties jwtProps,
-            MfaService mfaService,
-            MfaProperties mfaProps
+            JwtProperties jwtProps
     ) {
         this.userRepo = userRepo;
         this.roleRepo = roleRepo;
@@ -43,8 +38,6 @@ public class AuthService {
         this.cryptoService = cryptoService;
         this.jwtService = jwtService;
         this.jwtProps = jwtProps;
-        this.mfaService = mfaService;
-        this.mfaProps = mfaProps;
     }
 
     @Transactional
@@ -62,44 +55,24 @@ public class AuthService {
         user.setPasswordHash(cryptoService.hashPassword(password));
         user.getRoles().add(applicantRole);
 
-        // For MVP, enable MFA by default (email-based OTP).
-        user.setMfaEnabled(true);
+        // MFA disabled for MVP
+        user.setMfaEnabled(false);
         user.setMfaEmail(user.getEmail());
 
         return userRepo.save(user);
     }
 
     /**
-     * Login step 1: validates credentials and triggers MFA if enabled.
-     * Returns a "pendingMfa" flag and the userId to complete step 2.
+     * Login: validates credentials and returns tokens directly (MFA disabled).
      */
-    @Transactional(readOnly = true)
-    public LoginStep1Result loginStep1(String email, String password) {
+    @Transactional
+    public AuthTokens login(String email, String password) {
         AppUser user = userRepo.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
 
         if (!user.isEnabled() || !cryptoService.matchesPassword(password, user.getPasswordHash())) {
             throw new IllegalArgumentException("Invalid credentials");
         }
-
-        if (user.isMfaEnabled()) {
-            String otp = mfaService.createChallenge(user, 300); // 5 minutes
-            String devOtp = mfaProps.isDevReturnOtp() ? otp : null;
-            return new LoginStep1Result(user.getId(), true, devOtp);
-        }
-
-        return new LoginStep1Result(user.getId(), false, null);
-    }
-
-    @Transactional
-    public AuthTokens loginStep2VerifyMfa(UUID userId, String otp) {
-        boolean ok = mfaService.verifyLatestChallenge(userId, otp);
-        if (!ok) {
-            throw new IllegalArgumentException("Invalid or expired OTP");
-        }
-
-        AppUser user = userRepo.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         return issueTokens(user);
     }
@@ -148,6 +121,5 @@ public class AuthService {
         });
     }
 
-    public record LoginStep1Result(UUID userId, boolean pendingMfa, String devOtp) {}
     public record AuthTokens(String accessToken, String refreshToken) {}
 }
