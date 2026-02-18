@@ -30,9 +30,13 @@ public class SecurityConfig {
                         // public
                         .requestMatchers("/", "/health", "/docs", "/api/info").permitAll()
                         // Swagger/OpenAPI (springdoc)
+                        // NOTE: "/v3/api-docs/**" does NOT match the exact "/v3/api-docs" path,
+                        // which causes a 403 when Swagger UI tries to load the OpenAPI JSON.
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
+                                "/v3/api-docs",
+                                "/v3/api-docs.yaml",
                                 "/v3/api-docs/**",
                                 "/api-docs/**" // legacy/custom path if enabled in some environments
                         ).permitAll()
