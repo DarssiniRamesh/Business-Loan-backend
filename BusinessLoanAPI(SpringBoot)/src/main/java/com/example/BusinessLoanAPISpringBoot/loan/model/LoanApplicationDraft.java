@@ -9,6 +9,11 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import java.util.Map;
+
+
 /**
  * Loan application draft persisted per user, supporting multi-step wizard saves.
  *

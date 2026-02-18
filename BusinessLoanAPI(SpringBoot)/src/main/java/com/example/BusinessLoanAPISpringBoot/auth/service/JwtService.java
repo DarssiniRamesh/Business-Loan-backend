@@ -21,9 +21,10 @@ import java.util.UUID;
 public class JwtService {
     private final JwtProperties props;
     private final SecretKey key;
-
+    
     public JwtService(JwtProperties props) {
         this.props = props;
+        System.out.println("JWT SECRET HASH: " + props.secret().hashCode());
 
         String secret = props.secret();
         if (secret == null || secret.isBlank()) {
