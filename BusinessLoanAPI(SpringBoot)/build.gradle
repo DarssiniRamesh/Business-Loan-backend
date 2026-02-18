@@ -22,9 +22,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-	// Spring Boot 3.x requires springdoc-openapi 2.x starter artifacts.
-	// Use a recent version for improved proxy/forward-header compatibility.
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+	// Spring Boot 3.4.x requires springdoc-openapi 2.7.x+ (use latest stable 2.8.x).
+	// Older springdoc versions can break OpenAPI generation at runtime, causing /v3/api-docs to return 500.
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
 
 	// Security + JWT
 	implementation 'org.springframework.boot:spring-boot-starter-security'
