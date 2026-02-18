@@ -50,13 +50,71 @@ ENV_FILE_CANDIDATES=(
 )
 
 ENV_FILE_LOADED=""
+
+load_env_file() {
+  local env_path="$1"
+
+  # Read .env safely (do NOT `source`), because values may contain shell metacharacters
+  # like '&' which would break/skip assignments when sourced.
+  #
+  # Supports lines like:
+  #   KEY=value
+  #   KEY="value with spaces"
+  # Ignores blank lines and comments beginning with '#'.
+  #
+  # Note: this intentionally does not support complex shell expansions in .env.
+  local line key value
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Trim trailing CR (CRLF)
+    line="${line%$'\r'}"
+
+    # Skip empty lines and comments
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" =~ ^[[:space:]]*# ]] && continue
+
+    # Must look like KEY=VALUE
+    if [[ "${line}" != *"="* ]]; then
+      continue
+    fi
+
+    key="${line%%=*}"
+    value="${line#*=}"
+
+    # Trim whitespace around key
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+
+    # Strip optional leading "export "
+    if [[ "${key}" == export[[:space:]]* ]]; then
+      key="${key#export }"
+      key="${key#"${key%%[![:space:]]*}"}"
+    fi
+
+    # Only allow valid bash env var names
+    if [[ ! "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      continue
+    fi
+
+    # Trim surrounding whitespace on value (but preserve internal spaces)
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+
+    # Remove surrounding quotes if present
+    if [[ "${value}" =~ ^\".*\"$ ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "${value}" =~ ^\'.*\'$ ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    export "${key}=${value}"
+  done < "${env_path}"
+}
+
 for ENV_FILE in "${ENV_FILE_CANDIDATES[@]}"; do
   if [[ -f "${ENV_FILE}" ]]; then
     ENV_FILE_LOADED="${ENV_FILE}"
-    # shellcheck disable=SC1090
-    set -a
-    source "${ENV_FILE}"
-    set +a
+    load_env_file "${ENV_FILE}"
     break
   fi
 done
