@@ -67,7 +67,11 @@ public class AuthService {
      */
     @Transactional
     public AuthTokens login(String email, String password) {
-        AppUser user = userRepo.findByEmailIgnoreCase(email)
+        // Normalize email to avoid hard-to-spot login failures from copy/paste whitespace.
+        // (Frontend also trims, but this keeps the API resilient.)
+        String normalizedEmail = email == null ? "" : email.trim();
+
+        AppUser user = userRepo.findByEmailIgnoreCase(normalizedEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
 
         if (!user.isEnabled() || !cryptoService.matchesPassword(password, user.getPasswordHash())) {
