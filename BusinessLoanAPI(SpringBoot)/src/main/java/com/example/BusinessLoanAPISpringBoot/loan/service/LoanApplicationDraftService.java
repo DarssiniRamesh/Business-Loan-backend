@@ -2,9 +2,14 @@ package com.example.BusinessLoanAPISpringBoot.loan.service;
 
 import com.example.BusinessLoanAPISpringBoot.documents.model.SupportingDocument;
 import com.example.BusinessLoanAPISpringBoot.documents.repo.SupportingDocumentRepository;
+import com.example.BusinessLoanAPISpringBoot.auth.model.AppUser;
+import com.example.BusinessLoanAPISpringBoot.auth.repo.AppUserRepository;
 import com.example.BusinessLoanAPISpringBoot.loan.api.dto.LoanDraftDtos;
 import com.example.BusinessLoanAPISpringBoot.loan.model.LoanApplicationDraft;
 import com.example.BusinessLoanAPISpringBoot.loan.repo.LoanApplicationDraftRepository;
+import com.example.BusinessLoanAPISpringBoot.notifications.model.NotificationEventType;
+import com.example.BusinessLoanAPISpringBoot.notifications.model.NotificationRequest;
+import com.example.BusinessLoanAPISpringBoot.notifications.service.NotificationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,16 +33,23 @@ public class LoanApplicationDraftService {
     private final ObjectMapper objectMapper;
     private final RiskDecisioningService riskDecisioningService;
 
+    private final AppUserRepository appUserRepository;
+    private final NotificationService notificationService;
+
     public LoanApplicationDraftService(
             LoanApplicationDraftRepository repo,
             SupportingDocumentRepository supportingDocumentRepository,
             ObjectMapper objectMapper,
-            RiskDecisioningService riskDecisioningService
+            RiskDecisioningService riskDecisioningService,
+            AppUserRepository appUserRepository,
+            NotificationService notificationService
     ) {
         this.repo = repo;
         this.supportingDocumentRepository = supportingDocumentRepository;
         this.objectMapper = objectMapper;
         this.riskDecisioningService = riskDecisioningService;
+        this.appUserRepository = appUserRepository;
+        this.notificationService = notificationService;
     }
 
     // PUBLIC_INTERFACE
@@ -237,11 +249,27 @@ public class LoanApplicationDraftService {
             draft.setDecisionedAt(Instant.now());
         }
 
+        Instant now = Instant.now();
         draft.setStatus("SUBMITTED");
-        draft.setSubmittedAt(Instant.now());
-        draft.setUpdatedAt(Instant.now());
+        draft.setSubmittedAt(now);
+        draft.setUpdatedAt(now);
 
-        return toResponse(repo.save(draft));
+        LoanApplicationDraft saved = repo.save(draft);
+
+        // Best-effort notification. If contact info is missing or notifications are disabled, this no-ops.
+        AppUser user = appUserRepository.findById(userId).orElse(null);
+        notificationService.onApplicationSubmitted(new NotificationRequest(
+                NotificationEventType.APPLICATION_SUBMITTED,
+                saved.getId(),
+                saved.getUserId(),
+                user == null ? null : user.getEmail(),
+                null, // applicant phone not stored in MVP schema
+                saved.getDecision(),
+                saved.getDecisionReason(),
+                now
+        ));
+
+        return toResponse(saved);
     }
 
     // PUBLIC_INTERFACE

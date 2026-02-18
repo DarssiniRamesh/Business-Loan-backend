@@ -1,8 +1,13 @@
 package com.example.BusinessLoanAPISpringBoot.officer.service;
 
 import com.example.BusinessLoanAPISpringBoot.audit.service.AuditEventService;
+import com.example.BusinessLoanAPISpringBoot.auth.model.AppUser;
+import com.example.BusinessLoanAPISpringBoot.auth.repo.AppUserRepository;
 import com.example.BusinessLoanAPISpringBoot.loan.model.LoanApplicationDraft;
 import com.example.BusinessLoanAPISpringBoot.loan.repo.LoanApplicationDraftRepository;
+import com.example.BusinessLoanAPISpringBoot.notifications.model.NotificationEventType;
+import com.example.BusinessLoanAPISpringBoot.notifications.model.NotificationRequest;
+import com.example.BusinessLoanAPISpringBoot.notifications.service.NotificationService;
 import com.example.BusinessLoanAPISpringBoot.officer.api.dto.OfficerDtos;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,10 +28,19 @@ public class OfficerService {
 
     private final LoanApplicationDraftRepository draftRepository;
     private final AuditEventService auditEventService;
+    private final AppUserRepository appUserRepository;
+    private final NotificationService notificationService;
 
-    public OfficerService(LoanApplicationDraftRepository draftRepository, AuditEventService auditEventService) {
+    public OfficerService(
+            LoanApplicationDraftRepository draftRepository,
+            AuditEventService auditEventService,
+            AppUserRepository appUserRepository,
+            NotificationService notificationService
+    ) {
         this.draftRepository = draftRepository;
         this.auditEventService = auditEventService;
+        this.appUserRepository = appUserRepository;
+        this.notificationService = notificationService;
     }
 
     // PUBLIC_INTERFACE
@@ -116,6 +130,19 @@ public class OfficerService {
                         "reason", officerReason
                 )
         );
+
+        // Best-effort notification to applicant (and optional officer copy).
+        AppUser applicant = draft.getUserId() == null ? null : appUserRepository.findById(draft.getUserId()).orElse(null);
+        notificationService.onDecisionOverridden(new NotificationRequest(
+                NotificationEventType.DECISION_OVERRIDDEN,
+                draft.getId(),
+                draft.getUserId(),
+                applicant == null ? null : applicant.getEmail(),
+                null, // applicant phone not stored in MVP schema
+                draft.getDecision(),
+                draft.getDecisionReason(),
+                now
+        ));
 
         return new OfficerDtos.DecisionOverrideResponse(
                 draftId,
