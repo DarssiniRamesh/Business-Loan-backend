@@ -2,6 +2,7 @@ package com.example.BusinessLoanAPISpringBoot.loan.api;
 
 import com.example.BusinessLoanAPISpringBoot.loan.api.dto.LoanDraftDtos;
 import com.example.BusinessLoanAPISpringBoot.loan.service.LoanApplicationDraftService;
+import com.example.BusinessLoanAPISpringBoot.loan.service.RiskDecisioningService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -25,9 +26,11 @@ import java.util.UUID;
 public class LoanApplicationDraftController {
 
     private final LoanApplicationDraftService service;
+    private final RiskDecisioningService riskDecisioningService;
 
-    public LoanApplicationDraftController(LoanApplicationDraftService service) {
+    public LoanApplicationDraftController(LoanApplicationDraftService service, RiskDecisioningService riskDecisioningService) {
         this.service = service;
+        this.riskDecisioningService = riskDecisioningService;
     }
 
     @PostMapping
@@ -87,6 +90,16 @@ public class LoanApplicationDraftController {
     ) {
         UUID userId = subjectAsUserId(auth);
         return service.patchSection(userId, draftId, req);
+    }
+
+    @PostMapping("/{draftId}/decision")
+    @Operation(
+            summary = "Run risk scoring and decisioning for a draft",
+            description = "Computes a risk score and decision (PRE_QUALIFIED / MANUAL_REVIEW / DECLINED) for the specified draft, persists the result on the draft record, and returns the updated draft."
+    )
+    public LoanDraftDtos.DraftResponse decide(Authentication auth, @PathVariable UUID draftId) {
+        UUID userId = subjectAsUserId(auth);
+        return service.runDecisioning(userId, draftId);
     }
 
     @DeleteMapping("/{draftId}")

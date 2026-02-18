@@ -23,10 +23,16 @@ public class LoanApplicationDraftService {
 
     private final LoanApplicationDraftRepository repo;
     private final ObjectMapper objectMapper;
+    private final RiskDecisioningService riskDecisioningService;
 
-    public LoanApplicationDraftService(LoanApplicationDraftRepository repo, ObjectMapper objectMapper) {
+    public LoanApplicationDraftService(
+            LoanApplicationDraftRepository repo,
+            ObjectMapper objectMapper,
+            RiskDecisioningService riskDecisioningService
+    ) {
         this.repo = repo;
         this.objectMapper = objectMapper;
+        this.riskDecisioningService = riskDecisioningService;
     }
 
     // PUBLIC_INTERFACE
@@ -145,6 +151,30 @@ public class LoanApplicationDraftService {
 
     // PUBLIC_INTERFACE
     @Transactional
+    public LoanDraftDtos.DraftResponse runDecisioning(UUID userId, UUID draftId) {
+        /** Compute and persist risk score + decision for the given draft owned by the current user. */
+        LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
+
+        RiskDecisioningService.RiskDecision rd = riskDecisioningService.scoreAndDecide(draft.getData());
+
+        draft.setRiskScore(rd.score());
+        draft.setDecision(rd.decision().name());
+        draft.setDecisionReason(rd.reason());
+        draft.setDecisionedAt(Instant.now());
+
+        // Optionally also update status to reflect completion of automated decisioning.
+        // Keep existing status if caller wants to control it, but default behavior is helpful.
+        if (draft.getStatus() == null || "DRAFT".equalsIgnoreCase(draft.getStatus())) {
+            draft.setStatus("DECISIONED");
+        }
+
+        draft.setUpdatedAt(Instant.now());
+        return toResponse(repo.save(draft));
+    }
+
+    // PUBLIC_INTERFACE
+    @Transactional
     public void delete(UUID userId, UUID draftId) {
         /** Delete a draft owned by the current user. */
         LoanApplicationDraft draft = repo.findByIdAndUserId(draftId, userId)
@@ -171,6 +201,10 @@ public class LoanApplicationDraftService {
                 d.getSectionStatus(),
                 d.getCurrentStep(),
                 d.getStatus(),
+                d.getRiskScore(),
+                d.getDecision(),
+                d.getDecisionReason(),
+                d.getDecisionedAt(),
                 d.getVersion(),
                 d.getCreatedAt(),
                 d.getUpdatedAt()

@@ -80,6 +80,16 @@ public final class LoanDraftDtos {
             String currentStep,
             @Schema(description = "Draft status.")
             String status,
+
+            @Schema(description = "Latest computed risk score (0-100). Null until evaluated.")
+            Integer riskScore,
+            @Schema(description = "Latest automated decision. One of PRE_QUALIFIED, MANUAL_REVIEW, DECLINED.")
+            String decision,
+            @Schema(description = "Human-readable reason/explanation for the decision.")
+            String decisionReason,
+            @Schema(description = "Timestamp when the decision was last computed.")
+            Instant decisionedAt,
+
             @Schema(description = "Optimistic concurrency version.")
             Long version,
             @Schema(description = "Created timestamp.")

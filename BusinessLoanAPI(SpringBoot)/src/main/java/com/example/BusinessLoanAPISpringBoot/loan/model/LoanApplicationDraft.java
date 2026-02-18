@@ -45,6 +45,31 @@ public class LoanApplicationDraft {
     private String status;
 
     /**
+     * Computed automated risk score (0-100). Null until the scoring engine runs.
+     */
+    @Column(name = "risk_score")
+    private Integer riskScore;
+
+    /**
+     * Automated decision outcome derived from risk score and business rules.
+     * Expected values: PRE_QUALIFIED, MANUAL_REVIEW, DECLINED.
+     */
+    @Column(name = "decision")
+    private String decision;
+
+    /**
+     * Human-readable explanation of the decision, suitable for audit/debugging.
+     */
+    @Column(name = "decision_reason")
+    private String decisionReason;
+
+    /**
+     * When the application was last evaluated by the risk engine.
+     */
+    @Column(name = "decisioned_at")
+    private Instant decisionedAt;
+
+    /**
      * Optimistic concurrency token. Increments on each update.
      */
     @Version
@@ -108,6 +133,42 @@ public class LoanApplicationDraft {
 
     public LoanApplicationDraft setStatus(String status) {
         this.status = status;
+        return this;
+    }
+
+    public Integer getRiskScore() {
+        return riskScore;
+    }
+
+    public LoanApplicationDraft setRiskScore(Integer riskScore) {
+        this.riskScore = riskScore;
+        return this;
+    }
+
+    public String getDecision() {
+        return decision;
+    }
+
+    public LoanApplicationDraft setDecision(String decision) {
+        this.decision = decision;
+        return this;
+    }
+
+    public String getDecisionReason() {
+        return decisionReason;
+    }
+
+    public LoanApplicationDraft setDecisionReason(String decisionReason) {
+        this.decisionReason = decisionReason;
+        return this;
+    }
+
+    public Instant getDecisionedAt() {
+        return decisionedAt;
+    }
+
+    public LoanApplicationDraft setDecisionedAt(Instant decisionedAt) {
+        this.decisionedAt = decisionedAt;
         return this;
     }
 
