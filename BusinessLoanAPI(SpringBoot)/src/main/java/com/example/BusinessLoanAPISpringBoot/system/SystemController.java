@@ -23,11 +23,21 @@ public class SystemController {
     }
 
     @GetMapping("/docs")
-    @Operation(summary = "API Documentation", description = "Redirects to Swagger UI preserving original scheme/host/port.")
+    @Operation(
+            summary = "API Documentation",
+            description = "Redirects to Swagger UI while preserving scheme/host/port and any reverse-proxy path prefix (e.g. /proxy/3010)."
+    )
     public RedirectView docs(HttpServletRequest request) {
+        // Preserve any reverse-proxy prefix (e.g. /proxy/3010) by rewriting based on the
+        // incoming request URI rather than forcing an absolute root path.
+        String requestUri = request.getRequestURI();
+        String basePath = requestUri.endsWith("/docs")
+                ? requestUri.substring(0, requestUri.length() - "/docs".length())
+                : requestUri;
+
         String target = UriComponentsBuilder
                 .fromHttpRequest(new ServletServerHttpRequest(request))
-                .replacePath("/swagger-ui.html")
+                .replacePath(basePath + "/swagger-ui/index.html")
                 .replaceQuery(null)
                 .build()
                 .toUriString();
