@@ -29,7 +29,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(registry -> registry
                         // public
                         .requestMatchers("/", "/health", "/docs", "/api/info").permitAll()
-                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/api-docs/**").permitAll()
+                        // Swagger/OpenAPI (springdoc)
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/api-docs/**" // legacy/custom path if enabled in some environments
+                        ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/**").permitAll()
                         // everything else requires auth
                         .anyRequest().authenticated()
