@@ -52,11 +52,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     new UsernamePasswordAuthenticationToken(claims.getSubject(), null, auths);
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
-        }catch (Exception e) {
-    e.printStackTrace(); // VERY IMPORTANT
-    SecurityContextHolder.clearContext();
-}
-
+        } catch (Exception e) {
+            // Invalid/expired token: treat request as unauthenticated.
+            // Do not throw here; Spring Security will return 401 for protected endpoints.
+            SecurityContextHolder.clearContext();
+        }
 
         filterChain.doFilter(request, response);
     }
