@@ -24,8 +24,8 @@ public class JwtService {
     
     public JwtService(JwtProperties props) {
         this.props = props;
-        System.out.println("JWT SECRET HASH: " + props.secret().hashCode());
 
+        // Avoid logging anything derived from secrets (even hashes) to reduce noise and risk.
         String secret = props.secret();
         if (secret == null || secret.isBlank()) {
             throw new IllegalStateException(
